@@ -2,6 +2,7 @@ import { getContract, createPublicClient, http, encodeFunctionData, PublicClient
 import { EntryPointAbi } from "../EntryPointAbi"
 import { ethers } from "ethers"
 import Safe from "@safe-global/protocol-kit"
+import { EthAdapter } from "@safe-global/safe-core-sdk-types"
 
 export interface UserOperationData {
     to: string
@@ -26,10 +27,10 @@ export interface UserOperation {
 
 export class PimlicoRelay {
     apiKey: string
-    provider: ethers.providers.Provider
+    ethAdapter: EthAdapter
     safeSDK: Safe
-    static entryPointAddress: `0x${string}` = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
-    static erc4337moduleAddress: `0x${string}` = "0x86A74784381f8A28465383a6cA40C82d28f9895f"
+    entryPointAddress: string
+    erc4337moduleAddress: string
 
     chainIdToChainName: Record<number, string> = {
         5: "goerli",
@@ -38,7 +39,22 @@ export class PimlicoRelay {
         100: "gnosis"
     }
 
-    getPimlicoBundlerProvider(chainId: number): PublicClient<HttpTransport, undefined> {
+    constructor(
+        apiKey: string,
+        ethAdapter: EthAdapter,
+        safeSDK: Safe,
+        entryPointAddress?: string,
+        erc4337moduleAddress?: string
+    ) {
+        this.apiKey = apiKey
+        this.ethAdapter = ethAdapter
+        this.safeSDK = safeSDK
+
+        this.entryPointAddress = entryPointAddress ?? "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
+        this.erc4337moduleAddress = erc4337moduleAddress ?? "0x86A74784381f8A28465383a6cA40C82d28f9895f"
+    }
+
+    private getPimlicoBundlerProvider(chainId: number): PublicClient<HttpTransport, undefined> {
         const chainName = this.chainIdToChainName[chainId]
 
         return createPublicClient({
@@ -46,7 +62,7 @@ export class PimlicoRelay {
         })
     }
 
-    getPimlicoPaymasterProvider(chainId: number): PublicClient<HttpTransport, undefined> {
+    private getPimlicoPaymasterProvider(chainId: number): PublicClient<HttpTransport, undefined> {
         const chainName = this.chainIdToChainName[chainId]
 
         return createPublicClient({
@@ -54,29 +70,30 @@ export class PimlicoRelay {
         })
     }
 
-    constructor(apiKey: string, provider: ethers.providers.Provider, safeSDK: Safe) {
-        this.apiKey = apiKey
-        this.provider = provider
-        this.safeSDK = safeSDK
-    }
-
     private async getNonce(sender: string) {
-        const entryPoint = new ethers.Contract(PimlicoRelay.entryPointAddress, EntryPointAbi, this.provider)
-        const nonce = await entryPoint.getNonce(sender, 0)
+        const nonce = await this.ethAdapter.call({
+            to: this.entryPointAddress,
+            data: encodeFunctionData({
+                abi: EntryPointAbi,
+                functionName: "getNonce",
+                args: [sender as `0x${string}`, 0n]
+            }),
+            from: sender
+        })
 
-        return BigInt(nonce)
+        return Number(nonce)
     }
 
     private async verify4337ModuleEnabled() {
         // verify it is even deployed
-        const code = await this.provider.getCode(PimlicoRelay.erc4337moduleAddress)
+        const code = await this.ethAdapter.getContractCode(this.erc4337moduleAddress)
         if (code === "0x") {
-            throw new Error(`ERC4337 module at ${PimlicoRelay.erc4337moduleAddress} not deployed`)
+            throw new Error(`ERC4337 module at ${this.erc4337moduleAddress} not deployed`)
         }
 
-        const enabled = await this.safeSDK.isModuleEnabled(PimlicoRelay.erc4337moduleAddress)
+        const enabled = await this.safeSDK.isModuleEnabled(this.erc4337moduleAddress)
         if (!enabled) {
-            throw new Error(`ERC4337 module at ${PimlicoRelay.erc4337moduleAddress} not enabled for this Safe`)
+            throw new Error(`ERC4337 module at ${this.erc4337moduleAddress} not enabled for this Safe`)
         }
     }
 
@@ -129,7 +146,7 @@ export class PimlicoRelay {
                 params: [
                     // @ts-ignore
                     { ...op, preVerificationGas: "0x1", verificationGasLimit: "0x1", callGasLimit: "0x1" },
-                    PimlicoRelay.entryPointAddress
+                    this.entryPointAddress as `0x${string}`
                 ]
             })
 

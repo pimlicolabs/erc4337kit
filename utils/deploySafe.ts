@@ -1,7 +1,6 @@
 import { SafeAccountConfig, SafeFactory } from "@safe-global/protocol-kit"
 import { EthersAdapter } from "@safe-global/protocol-kit"
 import { ethers } from "ethers"
-import { HardhatRuntimeEnvironment } from "hardhat/types"
 import hre from "hardhat"
 import "@nomiclabs/hardhat-ethers"
 
@@ -9,12 +8,11 @@ import "@nomiclabs/hardhat-ethers"
 
 const entryPointAddress = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
 
-const wallet = new ethers.Wallet(
-    "0x22a61c16b2fba3ee185d9bb17afdb5cb913456c0c20259f36e1f53770374cb81",
-    hre.ethers.provider
-)
-const walletAddr = "0x05Dc348c8Fac2A325b5e2355497e48A01ff22cc1"
+if (process.env.SIGNER_PRIVATE_KEY === undefined) {
+    throw new Error("SIGNER_PRIVATE_KEY not set")
+}
 
+const wallet = new ethers.Wallet(process.env.SIGNER_PRIVATE_KEY, hre.ethers.provider)
 interface Config {
     RPC_URL: string
     DEPLOYER_ADDRESS_PRIVATE_KEY: string

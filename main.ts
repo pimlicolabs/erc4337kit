@@ -9,11 +9,16 @@ const PIMLICO_API_KEY = process.env.PIMLICO_API_KEY
 if (!PIMLICO_API_KEY) {
     throw new Error("PIMLICO_API_KEY not set")
 }
+if (process.env.SIGNER_PRIVATE_KEY === undefined) {
+    throw new Error("SIGNER_PRIVATE_KEY not set")
+}
 
-const RPC_URL = "https://goerli.rpc.thirdweb.com"
+const RPC_URL = "https://rpc.ankr.com/eth_goerli"
 const provider = new ethers.providers.StaticJsonRpcProvider(RPC_URL)
-const wallet = new ethers.Wallet("0x22a61c16b2fba3ee185d9bb17afdb5cb913456c0c20259f36e1f53770374cb81", provider)
+const wallet = new ethers.Wallet(process.env.SIGNER_PRIVATE_KEY, provider)
 const safeAddress = "0x1ca7f3F32A65e1CAa71DF6726cF4446524355F69"
+const entryPointAddress = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
+const erc4337ModuleAddress = "0x86A74784381f8A28465383a6cA40C82d28f9895f"
 
 // Create a transaction object
 const safeTransactionData: UserOperationData = {
@@ -24,7 +29,7 @@ const safeTransactionData: UserOperationData = {
 }
 
 async function enableModuleIfNotEnabled(safeSdk: Safe) {
-    const isEnabled = await safeSdk.isModuleEnabled(PimlicoRelay.erc4337moduleAddress)
+    const isEnabled = await safeSdk.isModuleEnabled(erc4337ModuleAddress)
 
     if (isEnabled) {
         console.log("ERC-4337 MODULE ENABLED")
@@ -33,7 +38,7 @@ async function enableModuleIfNotEnabled(safeSdk: Safe) {
 
     console.log("ERC-4337 MODULE NOT ENABLED")
 
-    const safeTransaction = await safeSdk.createEnableModuleTx(PimlicoRelay.erc4337moduleAddress)
+    const safeTransaction = await safeSdk.createEnableModuleTx(erc4337ModuleAddress)
     const txResponse = await safeSdk.executeTransaction(safeTransaction)
     await txResponse.transactionResponse?.wait()
 }
@@ -66,7 +71,7 @@ async function relayTransaction() {
     // await fundSafeIfNotFunded(safeSDK)
 
     // rome-ignore lint/style/noNonNullAssertion:
-    const pimlicoRelay = new PimlicoRelay(PIMLICO_API_KEY!, wallet.provider, safeSDK)
+    const pimlicoRelay = new PimlicoRelay(PIMLICO_API_KEY!, ethAdapter, safeSDK)
     const op = await pimlicoRelay.createUserOperation(safeTransactionData)
 
     const useropHash = await pimlicoRelay.relayUserOperation(op)
